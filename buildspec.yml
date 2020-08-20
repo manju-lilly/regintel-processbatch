@@ -1,0 +1,22 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.7
+      nodejs: 10
+    commands:
+      - if [ -f "${CODEBUILD_SRC_DIR}/.env" ]; then
+          . "${CODEBUILD_SRC_DIR}/.env";
+        fi
+      - . ${CODEBUILD_SRC_DIR}/build-scripts/install.sh
+  pre_build:
+    commands:
+      - . ${CODEBUILD_SRC_DIR}/build-scripts/pre_build.sh
+  build:
+    commands:
+      - . ${CODEBUILD_SRC_DIR}/build-scripts/build.sh
+artifacts:
+  files:
+    - ${TEMPLATE_PATH}
+    - ${PARAMETER_FILE_NAME}
+  discard-paths: no

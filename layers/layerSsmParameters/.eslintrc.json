@@ -1,0 +1,44 @@
+{
+  "extends": "airbnb-base",
+  "rules": {
+    "no-console": 0,
+    "arrow-body-style": [
+      "error",
+      "always"
+    ],
+    "indent": [
+      "error",
+      2
+    ],
+    "new-cap": [
+      "error",
+      {
+        "properties": false
+      }
+    ],
+    "no-param-reassign": [
+      "error",
+      {
+        "props": false
+      }
+    ],
+    "no-plusplus": 0,
+    "no-loop-func": 0,
+    "linebreak-style": 0,
+    "import/no-extraneous-dependencies": [
+      "error",
+      {
+        "devDependencies": [
+          "**/*.test.js",
+          "**/*.spec.js",
+          "nodejs/node_modules/**/*"
+        ]
+      }
+    ]
+  },
+  "env": {
+    "node": true,
+    "es6": true,
+    "jest": true
+  }
+}

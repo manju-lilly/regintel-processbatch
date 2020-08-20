@@ -1,0 +1,17 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.7
+  pre_build:
+    commands:
+      - echo "Starting pre_build - $(date)"
+      - echo "Completed pre_build - $(date)"
+  build:
+    commands:
+      - echo "Starting build - $(date)"
+      - echo "Completed build - $(date)"
+  post_build:
+    commands:
+      - echo "Starting post_build - $(date)"
+      - echo "Completed post_build - $(date)"

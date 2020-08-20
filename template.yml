@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform:  'AWS::Serverless-2016-10-31'
+
+Description: >
+    mdids-regintel-processbatch
+
+Parameters:
+    #
+    # Allows selecting different values based on the environment being deployed to
+    DeployEnvironment:
+        Type: String
+        AllowedValues:
+            - dev
+            - qa
+            - prod
+    FunctionCurrentVersionAlias:
+        Type: String
+        Default: live
+    AppName:
+        Type: String
+    CostCenter:
+        Type: String
+    CostCenterApprover:
+        Type: String
+    SystemOwner:
+        Type: String
+    SystemCustodian:
+        Type: String
+    PrimaryItContact:
+        Type: String
+    Level1BusinessArea:
+        Type: String
+    DataClassification:
+        Type: String
+        AllowedValues:
+          - "Green"
+          - "Yellow"
+          - "Orange"
+          - "Red"
+          - "TBD"
+    Hipaa:
+        Type: String
+        AllowedValues:
+          - "Yes"
+          - "No"
+          - "TBD"
+
+Mappings:
+    #
+    # For each allowed "DeployEnvironment" above different values are specified that can be used throughout the template
+    # DeploymentPreference values: https://github.com/awslabs/serverless-application-model/blob/master/docs/safe_lambda_deployments.rst
+    EnvironmentConfiguration:
+        dev:
+            FunctionDeploymentPreference: AllAtOnce
+            GatewayStageName: Dev
+            Subdomain: Unused
+            EnvHostedZoneNamePrefix: dev.
+        qa:
+            FunctionDeploymentPreference: AllAtOnce
+            GatewayStageName: QA
+            Subdomain: api.qa
+            EnvHostedZoneNamePrefix: qa.
+        prod:
+            FunctionDeploymentPreference: Canary10Percent5Minutes
+            GatewayStageName: Prod
+            Subdomain: api
+            EnvHostedZoneNamePrefix: ""
+Globals:
+    Function:
+        Timeout: 3
+
+Resources:
+    #
+    # ApiGatewayAccountConfig and ApiGatewayLoggingRole enable the API Gateway to write access
+    # logs to CloudWatch. The Log Group is generally `API-Gateway-Execution-Logs_{GATEWAY ID}/{GATEWAY STAGE}`
+    #
+    ApiGatewayAccountConfig:
+        Type: "AWS::ApiGateway::Account"
+        Properties:
+            CloudWatchRoleArn: !GetAtt "ApiGatewayLoggingRole.Arn"
+    ApiGatewayLoggingRole:
+        Type: "AWS::IAM::Role"
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - "apigateway.amazonaws.com"
+                      Action: "sts:AssumeRole"
+            Path: "/"
+            ManagedPolicyArns:
+                - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+            PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/LZ-IAM-Boundary"
+    ApiGateway:
+        Type: AWS::Serverless::Api
+        Properties:
+            StageName: !FindInMap [EnvironmentConfiguration, !Ref DeployEnvironment, GatewayStageName]
+            TracingEnabled: true
+            MethodSettings:
+                - HttpMethod: "*"
+                  MetricsEnabled: true
+                  ResourcePath: "/*"
+                  DataTraceEnabled: true
+                  LoggingLevel: ERROR # Valid options are `INFO` for debugging, or `ERROR`
+            Auth:
+              DefaultAuthorizer: CirrusApiAuthorizer
+              Authorizers:
+                CirrusApiAuthorizer:
+                    FunctionPayloadType: REQUEST
+                    FunctionArn: !GetAtt CirrusAuthenticators.Outputs.ApiAuthFunctionAlias
+                    Identity:
+                        Headers:
+                          - Authorization
+
+            
+    CirrusAuthenticators:
+      Type: AWS::Serverless::Application
+      Properties:
+        Location: codebuild-api-authenticators/authenticators.yaml
+        Parameters:
+            LogLevel: WARN
+            ApiAuthExpectedAudience: ""
+            ApiAuthExpectedIssuer: ""
+            EdgeAuthCloudFrontDistributionId: "UPDATE-LATER-IF-APPLICABLE"
+            PermissionsBoundary: "TRUE"
+            CostCenter: !Ref CostCenter
+            CostCenterApprover: !Ref CostCenterApprover
+            SystemOwner: !Ref SystemOwner
+            SystemCustodian: !Ref SystemCustodian
+            PrimaryItContact: !Ref PrimaryItContact
+            Level1BusinessArea: !Ref Level1BusinessArea
+            DataClassification: !Ref DataClassification
+            Hipaa: !Ref Hipaa
+
+    NodeHelloWorldFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+            CodeUri: functions/nodeExample
+            Handler: index.lambdaHandler
+            Runtime: nodejs10.x
+            PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/LZ-IAM-Boundary"
+            Environment:
+                Variables:
+                    PARAM1: VALUE
+            Events:
+                HelloWorld:
+                    Type: Api
+                    Properties:
+                        RestApiId: !Ref ApiGateway
+                        Path: /hello/node
+                        Method: get
+            AutoPublishAlias: !Ref FunctionCurrentVersionAlias
+            DeploymentPreference:
+                Type: !FindInMap [EnvironmentConfiguration, !Ref DeployEnvironment, FunctionDeploymentPreference]
+                Role: !GetAtt "IAMRoleForCodeDeploy.Arn"
+            Tracing: Active
+            Layers:
+              - !Ref VocaLayer
+
+    VocaLayer:
+      Type: AWS::Serverless::LayerVersion
+      Properties:
+        ContentUri: layers/layerVoca
+        CompatibleRuntimes:
+          - nodejs10.x
+
+    ParameterStoreCacheLayer:
+      Type: AWS::Serverless::LayerVersion
+      Properties:
+        ContentUri: layers/layerSsmParameters
+        CompatibleRuntimes:
+          - nodejs10.x
+
+    PythonHelloWorldFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+            CodeUri: functions/python_example
+            Handler: app.lambda_handler
+            Runtime: python3.7
+            PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/LZ-IAM-Boundary"
+            Environment:
+                Variables:
+                    PARAM1: VALUE
+            Events:
+                FooBar:
+                    Type: Api
+                    Properties:
+                        RestApiId: !Ref ApiGateway
+                        Path: /hello/python
+                        Method: get
+            AutoPublishAlias: !Ref FunctionCurrentVersionAlias
+            DeploymentPreference:
+                Type: !FindInMap [EnvironmentConfiguration, !Ref DeployEnvironment, FunctionDeploymentPreference]
+                Role: !GetAtt "IAMRoleForCodeDeploy.Arn"
+            Tracing: Active
+            Layers:
+              - !Ref PydashLayer
+
+    PydashLayer:
+      Type: AWS::Serverless::LayerVersion
+      Properties:
+        ContentUri: layers/layer_pydash
+        CompatibleRuntimes:
+          - python3.7
+
+    IAMRoleForCodeDeploy:
+        Type: AWS::IAM::Role
+        Properties:
+            ManagedPolicyArns:
+                - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda"
+            PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/LZ-IAM-Boundary"
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    -
+                        Action:
+                            - sts:AssumeRole
+                        Effect: Allow
+                        Principal:
+                            Service:
+                                - codedeploy.amazonaws.com
+# 
+    DynamoDBTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            SSESpecification:
+                SSEEnabled: true
+            BillingMode: PROVISIONED
+            ProvisionedThroughput:
+                WriteCapacityUnits: 1
+                ReadCapacityUnits: 1
+            AttributeDefinitions:
+                - AttributeName: id
+                  AttributeType: S
+            KeySchema:
+                - KeyType: HASH
+                  AttributeName: id
+# 
+
+# 
+
+Outputs:
+    ApiURL:
+        Description: "API URL"
+        Value: !Join
+            - ''
+            - - !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/"
+              - !FindInMap [EnvironmentConfiguration, !Ref DeployEnvironment, GatewayStageName]
+    AppName:
+        Description: "The name of the deployed application. A derivative of the repo name..."
+        Value: !Ref AppName

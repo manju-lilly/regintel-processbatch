@@ -1,0 +1,25 @@
+{
+  "Parameters": {
+    "DeployEnvironment": "prod",
+    "AppName": "mdids-regintel-processbatch",
+    "CostCenter": "Cost Center ID",
+    "CostCenterApprover": "Cost Center Approver User ID",
+    "SystemOwner": "C299342",
+    "SystemCustodian": "C299342",
+    "PrimaryItContact": "C299342",
+    "Level1BusinessArea": "MD IDS Insights",
+    "DataClassification": "Green",
+    "Hipaa": "Yes"
+  },
+  "Tags": {
+    "CostCenter": "Cost Center ID",
+    "CostCenterApprover": "Cost Center Approver User ID",
+    "SystemOwner": "C299342",
+    "SystemCustodian": "C299342",
+    "PrimaryItContact": "C299342",
+    "Level1BusinessArea": "MD IDS Insights",
+    "DataClassification": "Green",
+    "Hipaa": "Yes"
+  },
+  "StackPolicy": {}
+}

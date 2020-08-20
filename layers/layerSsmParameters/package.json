@@ -1,0 +1,23 @@
+{
+  "name": "@elilillyco/aws-layer-ssm-parameters",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx jest",
+    "lint": "npx eslint index.js nodejs/",
+    "output-api-docs": "npx jsdoc-to-markdown -d 3 -m none -g none  nodejs/node_modules/@elilillyco/aws-layer-ssm-parameters/index.js"
+  },
+  "engines": {
+    "node": ">=6.10 <=8.10"
+  },
+  "devDependencies": {
+    "aws-sdk": "^2.422.0",
+    "aws-sdk-mock": "^4.3.1",
+    "eslint": "^5.15.2",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-import": "^2.16.0",
+    "jest": "^24.5.0",
+    "nock": "^10.0.6"
+  }
+}
