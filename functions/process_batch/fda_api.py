@@ -4,7 +4,7 @@ import os
 import json
 import sqlite3
 import traceback
-
+from functools import reduce
 ## replace with cloudwatch
 import logging
 from utils import load_log_config
@@ -72,8 +72,9 @@ class FDAAPI(object):
         conn = None
         try:
             conn = sqlite3.connect(self.engine_url)
-        except Error as e:
-            self.log.error("error creating connection", e)
+            conn.row_factory = sqlite3.Row  # getting the column names
+        except Exception as e:
+            self.logger.error("error creating connection", e)
 
         return conn
 
@@ -144,6 +145,17 @@ class FDAAPI(object):
 
         return True
 
+    def get_rows(self, sql):
+        """Function for getting multiple rows
+
+        Args:
+            sql (string): select query
+        """
+        cur = self.conn.cursor()
+        self.conn.row_factory = self.sqlite_dict
+        cur.execute(sql)
+        return cur.fetchall()
+
     def insert_metadata(self):
         """
         insert metadata
@@ -188,7 +200,8 @@ class FDAAPI(object):
         # te
         self.insert_into_te(self.read_metadata_file(os.path.join(self.metadata_folder_loc,self.TE.filename)))
 
-    def format_response(self, drug_name, application_no, supplement_type, supplement_number, application_doc_typeId):
+    
+    def format_response(self, **kwargs):
         """[summary] JSON response for the event
 
         Args:
@@ -201,11 +214,74 @@ class FDAAPI(object):
         Returns:
             [type]: [json event response]
         """
-        # 
+        
+        response = {}
+        response["applicationNo"] = kwargs.get("applicationNo","")
+        response["supplementType"] = kwargs.get("supplementType","")
+        response["supplementNo"] = kwargs.get("supplementNo","")
+        response["applicationDocTypeId"] = kwargs.get("applicationDocTypeId","")
+    
+
+        ## fill following data
+        # get product information
+        product_sql = """select distinct p.applNo ApplicationNo, p.drugName DrugName, p.activeIngredient ActiveIngredient, p.strength Strength, p.form Form, x.description as 'MarketingStatus',
+                            (case when te.teCode is NULL then 'None' else te.teCode end)  TECode,
+                (case when p.referenceDrug is '1' then 'Yes' else 'No' end) ReferenceListedDrug,
+                (case when p.referenceStandard is '1' then 'Yes' else 'No' end) ReferenceStandard from product p 
+                left join(select ms.id, ms.applNo, ms_lkp.description, ms.productNo from marketingStatus ms
+                        left join marketingStatusLookup ms_lkp on ms.id=ms_lkp.id) x
+                on p.applNo = x.applNo and p.productNo = x.productNo
+                left join te on p.applNo = te.applNo and p.productNo = te.productNo where p.applNo = {applNo}
+                """
+        product_sql = (product_sql.format(
+            applNo=kwargs.get("applicationNo", "")))
+        
+        product_rows = self.get_rows(product_sql)
+        product_info = {}
+        for row in product_rows:
+            item = dict(row)        
+            for k, v in item.items():
+                if k not in product_info:
+                    product_info[k] = set()
+                
+                if v is not None:
+                    product_info[k].add(v)
+
+        ##TODO change code
+        for k, v in product_info.items():
+            if len(v) == 1:
+                product_info[k] = v.pop()
+            else:
+                product_info[k] = list(v)
+        # {'ApplicationNo': 4782, 'DrugName': 'PREMARIN', 'ActiveIngredient': 'ESTROGENS, CONJUGATED', 'Strength': ['0.3MG', '2.5MG', '0.625MG', '1.25MG', '0.45MG', '0.9MG'], 'Form': 'TABLET;ORAL', 'MarketingStatus': ['Discontinued\n', 'Prescription\n'], 'TECode': 'None', 'ReferenceListedDrug': ['No', 'Yes'], 'ReferenceStandard': 'No'}
+        print(product_info)
+        
+        ## supplement information query
+        supplement_sql =
+        """
+        select  sub.subNo SubmissionNo,
+		sub.applNo ApplicationNo,
+		sub_class_lkp.submissionClassCode ApprovalTypeCode,
+		sub_class_lkp.submissionClassDescription ApprovalType,
+		sub.subStatus SubmissionStatus,
+		docs.docsTypeId DocumentTypeId,
+		docs.docTypeDesc DocumentTypeDesc,
+		sub.subDate ActionDate,
+		sub.subPublicNotes SubmissionNotes,
+		sub.reviewPriority ReviewPriority ,
+        (case when sub_prop_type.submissionPropertyTypeCode is NULL then '' when sub_prop_type.submissionPropertyTypeCode is 'Null' then '' else sub_prop_type.submissionPropertyTypeCode end) OrphanDesignation
+        from submissions sub  left join submission_class_lookup sub_class_lkp on sub.subclasscodeId = sub_class_lkp.id
+        left join submission_property_type sub_prop_type on sub.applNo = sub_prop_type.applNo and sub.subNo = sub_prop_type.submissionNo
+        inner join (select docs.id,docs.submissionNo, docsTypeId, docs_lkp.description docTypeDesc, applNo, submissionType, applicationDocsTitle, applicationDocsURL, applicationDocsDate, description from application_docs docs
+        left join application_docs_type_lookup docs_lkp on docs.docsTypeId = docs_lkp.id) docs on docs.applNo = sub.applNo and docs.submissionNo = sub.subNo 
+        where sub.applNo = {applNo},
+        
+        """
+
+
 
     #region private methods to insert data
     def insert_action_type(self, data):
-        print(data)
         types=[]
         ids = []
 
@@ -390,4 +466,28 @@ class FDAAPI(object):
     def drop_table(tablename):
         self.conn.execute("DROP TABLE [{}]".format(tablename))
 
+    def get_total_rows(self, table_name):
+        """Return total number of rows in the table
+
+        Args:
+            table_name (string): name of the table
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT Count(*) from {}".format(table_name))
+        count = cursor.fetchall()
+        print("\n Total rows:{}".format(count[0][0]))
+        return count[0][0]
+    
+    
+    ## Get sqlite row to the dictionary
+    def sqlite_dict(self, cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
+
     #endregion
+
+
+api = FDAAPI(S3_metadata_loc=os.path.join("data", "metadata"))
+api.format_response(applicationNo=4782)
