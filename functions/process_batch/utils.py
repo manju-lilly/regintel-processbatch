@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import datetime
+import uuid
 
 ## ref: stackoverflow
 class ProcessBatchExceptionFormatter(logging.Formatter):
@@ -28,14 +29,17 @@ def load_log_config():
         os.makedirs("logs")
 
     ## exception formatter
-    filehandler = logging.FileHandler(
-        os.path.join("logs", 'log_{:%Y-%m-%d}.log'.format(datetime.now())))
+    filehandler = logging.FileHandler(os.path.join("logs", 'log_{:%Y-%m-%d}.log'.format(datetime.now())))
     streamhandler = logging.StreamHandler()
     filehandler.setFormatter(ProcessBatchExceptionFormatter(logging.BASIC_FORMAT))
-    streamhandler.setFormatter(
-        ProcessBatchExceptionFormatter(logging.BASIC_FORMAT))
+    streamhandler.setFormatter(ProcessBatchExceptionFormatter(logging.BASIC_FORMAT))
 
 
     ## add handlers
     log.addHandler(streamhandler)
     log.addHandler(filehandler)
+
+
+def make_unique_id():
+    id = uuid.uuid4()
+    return str(id)
