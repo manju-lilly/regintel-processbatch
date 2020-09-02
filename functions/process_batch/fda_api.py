@@ -130,14 +130,14 @@ class FDAAPI(object):
         except Exception as ex:
             tb = traceback.format_exc()
             self.logger.error(tb)
-            self.logger.exception('exception occurred')
+            self.logger.exception('exception occurred while creating tables')
             return False
             
         # names of the table that are created
         query = "SELECT tbl_name FROM sqlite_master WHERE type='table'"
         rows = self.conn.execute(query).fetchall()
         for row in rows:
-            self.logger.info("table created: %s" % row)
+            self.logger.info("table created: %s" % row[0])
 
         return True
 
@@ -223,13 +223,26 @@ class FDAAPI(object):
         """
         strTime = time.localtime(time.time())
         last_updated = time.strftime("%Y-%m-%d", strTime)
-        appl_no = kwargs.get("appl_no","")
-        submission_type = kwargs.get("submission_type","")
+        application_no = kwargs.get("application_no", "")
+        submission_type = kwargs.get("submission_type", "")
         submission_no = kwargs.get("submission_no", "")
         application_doc_type_id = kwargs.get("application_doc_type_id", "")
         s3_raw = kwargs.get("s3_raw", "")
         url = kwargs.get("url", "")
 
+        product_info = self.get_products(application_no)
+        application_info = self.get_application(application_no)
+        submission_info = self.get_submission(appl_no, appl_doc_type_id, submission_no)
+        print(application_info)
+        print("--" * 10)
+        print(submission_info)
+        return
+
+        # lambda helpers
+        extract_from_product_info = lambda x: list(set([v for item in product_info for k, v in item.items() if k == x]))
+        get_item = lambda l: l.pop() if len(l) == 1 else l                                         
+        
+        ## Construct response object
         ## build response object
         response = {}
         response['s3_raw'] = s3_raw
@@ -237,24 +250,30 @@ class FDAAPI(object):
         response['source_url'] = url
         response['file_name'] = os.path.basename(s3_raw)
         response['data_source'] = 'FDA'
+        response['drug_name'] = get_item(extract_from_product_info("drugName"))
+        response['active_substance'] = extract_from_product_info("activeSubstance")
+        response['strength'] = extract_from_product_info("activeSubstance")
+        response['dosage_form'] = extract_from_product_info("form")
+        response['therapeutic_area'] = ''
+        response['therapeutic_indication'] = ''
+
+        response['year_of_authorization'] = ''
+        response['license_holder'] = ''
+        response['route_of_administration'] = ''
+        response['submission_date_for_initial_approval'] = ''
+        response['approval_type'] = ''
+        response['document_type'] = ''
+        response['approval_status'] = ''
+        response['orphan_designation'] = ''
         
-        response['fda'] = {}
-        response['fda']['products'] = self.get_products(appl_no)
-        response['drug_name'] = self.get_drug_name(appl_no)
-        response['active_substance'] = self.get_active_substance(appl_no)
-        response['strength'] = self.get_strength(appl_no)
-        response['dosage_form'] = self.get_dosage_forms(appl_no)
-        response['therapeutic_area'] = ""
-        response['therapeutic_indication'] = ""
-        
-        license_holder,  self.get_application(appl_no)
-        
+        return
+
+        """
         ## Year of Authorization, License holder, Route Of Administration, Submission Date, Approval Type, Document Type, Approval Status
         submission_info = self.get_submission_info(appl_no, appl_doc_type_id, submission_no)
         
-        
-
         response = {**response, **product_info, **submission_info}
+        """
         return response
 
     # region private methods to insert data
@@ -430,13 +449,14 @@ class FDAAPI(object):
                 where p.applNo = {applNo}
 
                 """
+
         product_sql = (product_sql.format(product_tbl = self.PRODUCT.tablename,
             marketing_status_tbl = self.MARKETING_STATUS.tablename,
             marketing_status_lkp_tbl = self.MARKETING_STATUS_LOOKUP.tablename,
-            te_tbl = self.TE.tablename,
-            applNo=application_no))
-    
+            te_tbl = self.TE.tablename,applNo=application_no))
+        
         product_rows = self.get_rows(product_sql)
+        
         products = []
         for row in product_rows:
             item = dict(row)     
@@ -484,9 +504,32 @@ class FDAAPI(object):
             submission_info = {}
 
         return submission_info
+    
+    def get_application(self, application_no):
+
+        """ Function to retrieve application information from application table
+        Args:
+            application_no (int): application no
+
+        Returns:
+            [type]: [description]
+        """
+        application_sql = "select * from {table_name} where applNo = {application_no} ".format(table_name=self.APPLICATION.tablename,
+                                                                                               application_no=application_no)
+        
+        application_row = self.get_row(application_sql)
+
+        if application_row is not None and len(application_row) > 0:
+            application_info = dict(application_row)
+        else:
+            application_info = {}
+
+        return application_info
+    
     # endregion
    
     #region helpers
+
     def insert_into_sqlite_table(self, data, sql):
         self.cursor.executemany(sql, data)
         self.conn.commit()
@@ -549,6 +592,6 @@ class FDAAPI(object):
 
 
 api = FDAAPI(S3_metadata_loc=os.path.join("data", "metadata"))
-response = api.format_response(applicationNo=4782,submissionNo = 125, applicationDocTypeId = 1 )
+response = api.format_response(application_no=4782,submission_no = 125, application_doc_type_id = 1 )
 with open('fda.json', 'w') as outfile:
     json.dump(response, outfile)

@@ -19,9 +19,7 @@ def load_log_config():
     ## exception formatter, replace with cloud
     filehandler = logging.FileHandler(os.path.join("logs", 'log_{:%Y-%m-%d}.log'.format(datetime.now())))
     streamhandler = logging.StreamHandler()
-    filehandler.setFormatter(logging.BASIC_FORMAT)
-    streamhandler.setFormatter(logging.BASIC_FORMAT)
-
+    
 
     ## add handlers
     log.addHandler(streamhandler)
