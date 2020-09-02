@@ -4,9 +4,11 @@ import os
 import json
 import sqlite3
 import traceback
+import csv
+import time
+
 from functools import reduce
 
-## replace with cloudwatch
 import logging
 from collections import namedtuple
 
@@ -24,7 +26,7 @@ class FDAAPI(object):
     Args:
         object ([type]): [description]
     """
-    #region metadata_info
+    # region metadata_info
     APPLICATION = META_DATA_ITEM('application', 'Applications.txt')
     ACTION_TYPE = META_DATA_ITEM('action_type', 'ActionTypes_Lookup.txt')
     APPLICATION_DOC = META_DATA_ITEM('application_doc', 'ApplicationDocs.txt')
@@ -36,7 +38,7 @@ class FDAAPI(object):
     SUBMISSION_PROPERTY_TYPE = META_DATA_ITEM('submission_property_type', 'SubmissionPropertyType.txt')
     SUBMISSION = META_DATA_ITEM('submission', 'Submissions.txt')
     TE = META_DATA_ITEM('te','TE.txt')
-    #endregion
+    # endregion
 
     def __init__(self, **kwargs):
         metadata_folder_loc = kwargs.get('S3_metadata_loc', '')
@@ -49,7 +51,8 @@ class FDAAPI(object):
         
         # setup logger
         self.logger = logging.getLogger('process_batch')
-        self.conn = self.create_connection()
+        self.conn, self.cursor = self.create_connection()
+
         result = self.create_tables()
 
         # if result - insert metadata
@@ -57,18 +60,19 @@ class FDAAPI(object):
             self.insert_metadata()
 
     def create_connection(self):
-        """create database connection to the SQLite database specified by db_file location
-        
+        """
+        create database connection to the SQLite database specified by database file location  
         :return: Connection object or None
         """
         conn = None
         try:
             conn = sqlite3.connect(self.engine_url)
             conn.row_factory = sqlite3.Row  # getting the column names
+            c = conn.cursor()
         except Exception as e:
             self.logger.error("error creating connection", e)
 
-        return conn
+        return (conn, c)
 
     def create_tables(self):
         number_of_tables = 0
@@ -76,7 +80,7 @@ class FDAAPI(object):
         try:
             # open connection
             # Action Types
-            conn.execute("CREATE TABLE if not exists %s (id	INTEGER, description	TEXT, supplCategoryLevel1Code TEXT,supplCategoryLevel2Code TEXT, PRIMARY KEY(id))" % self.ACTION_TYPE.tablename)
+            conn.execute("CREATE TABLE if not exists %s (id	INTEGER, description TEXT, supplCategoryLevel1Code TEXT,supplCategoryLevel2Code TEXT, PRIMARY KEY(id))" % self.ACTION_TYPE.tablename)
             number_of_tables += 1
             
             # ApplicationDocs
@@ -96,7 +100,7 @@ class FDAAPI(object):
             number_of_tables += 1
 
             # Marketing status lookup
-            conn.execute("CREATE TABLE if not exists %s (id	INTEGER, description	TEXT);" %
+            conn.execute("CREATE TABLE if not exists %s (id	INTEGER, description TEXT);" %
                         self.MARKETING_STATUS_LOOKUP.tablename)
             number_of_tables += 1
 
@@ -113,12 +117,11 @@ class FDAAPI(object):
             number_of_tables += 1
 
             # Submissions
-            conn.execute("CREATE TABLE if not exists %s (applNo INTEGER, subclasscodeId	INTEGER, subType	TEXT,subNo	INTEGER, subStatus	TEXT, subDate	TEXT, subPublicNotes	TEXT, reviewPriority	TEXT);" %
-                        self.SUBMISSION.tablename)
+            conn.execute("CREATE TABLE if not exists %s (applNo INTEGER, subclasscodeId	INTEGER, subType	TEXT,subNo	INTEGER, subStatus	TEXT, subDate	TEXT, subPublicNotes	TEXT, reviewPriority	TEXT);" % self.SUBMISSION.tablename)
             number_of_tables += 1
 
             # TE
-            conn.execute("CREATE TABLE if not exists %s (applNo	INTEGER, productNo	INTEGER, marketingStatusId	INTEGER,teCode	TEXT);" %self.TE.tablename)
+            conn.execute("CREATE TABLE if not exists %s (applNo	INTEGER, productNo	INTEGER, marketingStatusId	INTEGER,teCode	TEXT);" % self.TE.tablename)
             number_of_tables += 1
 
             # commit
@@ -127,9 +130,10 @@ class FDAAPI(object):
         except Exception as ex:
             tb = traceback.format_exc()
             self.logger.error(tb)
-            self.logger.exception('Exception occurred')
+            self.logger.exception('exception occurred')
+            return False
             
-        ## names of the table that are created
+        # names of the table that are created
         query = "SELECT tbl_name FROM sqlite_master WHERE type='table'"
         rows = self.conn.execute(query).fetchall()
         for row in rows:
@@ -164,10 +168,11 @@ class FDAAPI(object):
         insert metadata
         """
         ## ActionTypes
-        self.insert_action_type(self.read_metadata_file(os.path.join(
+        num_rows = self.insert_action_type(self.read_metadata_file(os.path.join(
             self.metadata_folder_loc, self.ACTION_TYPE.filename)))
         
-        print("inserted into action type")
+        self.logger.info(f"inserted into action type, no of rows: {num_rows} inserted")
+
         ## ApplicationDocs
         self.insert_into_appl_docs(self.read_metadata_file(os.path.join(self.metadata_folder_loc, self.APPLICATION_DOC.filename)))
         print("inserted into application docs")
@@ -216,112 +221,69 @@ class FDAAPI(object):
         Returns:
             [type]: [json event response]
         """
-        
+        strTime = time.localtime(time.time())
+        last_updated = time.strftime("%Y-%m-%d", strTime)
+        appl_no = kwargs.get("appl_no","")
+        submission_type = kwargs.get("submission_type","")
+        submission_no = kwargs.get("submission_no", "")
+        application_doc_type_id = kwargs.get("application_doc_type_id", "")
+        s3_raw = kwargs.get("s3_raw", "")
+        url = kwargs.get("url", "")
+
+        ## build response object
         response = {}
-        response['id'] = make_unique_id()
-        response["applicationNo"] = kwargs.get("applicationNo","")
-        response["submissionType"] = kwargs.get("submissionType","")
-        response["submissionNo"] = kwargs.get("submissionNo", "")
-        response["applicationDocTypeId"] = kwargs.get("applicationDocTypeId","")
-    
-
-        ## fill following data
-        # get product information
-        product_sql = """select distinct  p.drugName drugName, p.activeIngredient activeSubstance, 
-                         p.strength strength, p.form form, x.description as 'marketingStatus',
-                        (case when te.teCode is NULL then 'None' else te.teCode end)  teCode,
-                (case when p.referenceDrug is '1' then 'Yes' else 'No' end) referenceListedDrug,
-                (case when p.referenceStandard is '1' then 'Yes' else 'No' end) referenceStandard 
-                from {product_tbl} p 
-                        left join(select ms.id, ms.applNo, ms_lkp.description, ms.productNo from {marketing_status_tbl} ms
-                        left join {marketing_status_lkp_tbl} ms_lkp on ms.id=ms_lkp.id) x
-                on p.applNo = x.applNo and p.productNo = x.productNo
-                left join {te_tbl} on p.applNo = te.applNo and p.productNo = te.productNo 
-                where p.applNo = {applNo}
-                """
-        product_sql = (product_sql.format(product_tbl = self.PRODUCT.tablename,
-            marketing_status_tbl = self.MARKETING_STATUS.tablename,
-            marketing_status_lkp_tbl = self.MARKETING_STATUS_LOOKUP.tablename,
-            te_tbl = self.TE.tablename,
-            applNo=kwargs.get("applicationNo", "")))
+        response['s3_raw'] = s3_raw
+        response['last_updated'] = last_updated
+        response['source_url'] = url
+        response['file_name'] = os.path.basename(s3_raw)
+        response['data_source'] = 'FDA'
         
-        product_rows = self.get_rows(product_sql)
-        product_info = {}
-        for row in product_rows:
-            item = dict(row)        
-            for k, v in item.items():
-                if k not in product_info:
-                    product_info[k] = set()
-                if v is not None:
-                    product_info[k].add(v)
-
-        product_info = (dict([(k, v.pop()) if len(v) == 1 else(k, list(v)) for k, v in product_info.items()]))
+        response['fda'] = {}
+        response['fda']['products'] = self.get_products(appl_no)
+        response['drug_name'] = self.get_drug_name(appl_no)
+        response['active_substance'] = self.get_active_substance(appl_no)
+        response['strength'] = self.get_strength(appl_no)
+        response['dosage_form'] = self.get_dosage_forms(appl_no)
+        response['therapeutic_area'] = ""
+        response['therapeutic_indication'] = ""
         
-        ## supplement information query 
-        submission_sql = """
-        select distinct 
-		sub_class_lkp.submissionClassCode approvalTypeCode,
-		sub_class_lkp.submissionClassDescription approvalType,
-		sub.subStatus submissionStatus,
-		docs.docsTypeId documentTypeId,
-		docs.docTypeDesc documentTypeDesc,
-		date(sub.subDate) yearOfAuthorization,
-		sub.subPublicNotes submissionNotes,
-		sub.reviewPriority reviewPriority ,
-        (case when sub_prop_type.submissionPropertyTypeCode is NULL then '' when sub_prop_type.submissionPropertyTypeCode is 'Null' then '' else sub_prop_type.submissionPropertyTypeCode end) orphanDesignation
-        from {submission_tbl} sub  left join {submission_class_lkp_tbl} sub_class_lkp on sub.subclasscodeId = sub_class_lkp.id
-        left join {submission_property_type_tbl} sub_prop_type on sub.applNo = sub_prop_type.applNo and sub.subNo = sub_prop_type.submissionNo
-        inner join (select docs.id,docs.submissionNo, docsTypeId, docs_lkp.description docTypeDesc, applNo, submissionType, applicationDocsTitle, applicationDocsURL, applicationDocsDate, description from {application_docs_tbl} docs
-        left join {application_docs_type_lookup_tbl} docs_lkp on docs.docsTypeId = docs_lkp.id) docs on docs.applNo = sub.applNo and docs.submissionNo = sub.subNo 
-        where sub.applNo = {applNo} and sub.subNo = {subNo} and docsTypeId={docsTypeId}
-        """
-        submission_sql = submission_sql.format(submission_tbl=self.SUBMISSION.tablename, submission_class_lkp_tbl=self.SUBMISSION_CLASS.tablename, submission_property_type_tbl=self.SUBMISSION_PROPERTY_TYPE.tablename,
-                                               application_docs_tbl=self.APPLICATION_DOC.tablename, application_docs_type_lookup_tbl=self.APPLICATION_DOC_TYPE.tablename, applNo=kwargs.get("applicationNo", ""),
-                                               subNo = kwargs.get("submissionNo", ""),
-            docsTypeId=kwargs.get("applicationDocTypeId", ""))
+        license_holder,  self.get_application(appl_no)
+        
+        ## Year of Authorization, License holder, Route Of Administration, Submission Date, Approval Type, Document Type, Approval Status
+        submission_info = self.get_submission_info(appl_no, appl_doc_type_id, submission_no)
         
         
-        submission_row = self.get_row(submission_sql)
-        if submission_row is not None and len(submission_row)>0:
-            submission_info = dict(submission_row)
-        else:
-            submission_info = {}
 
         response = {**response, **product_info, **submission_info}
-        print(response)
+        return response
 
-    #region private methods to insert data
+    # region private methods to insert data
     def insert_action_type(self, data):
         types=[]
-        ids = []
-
+        
         for row in data:
-            id=int(row[0])
-            desc = self.clean_string(row[1]) if row[1] else ""
-            code1= self.clean_string(row[2]) if row[2] else ""
-            code2= self.clean_string(row[3]) if row[3] else ""
-            if id not in ids:
-                ids.append(id)
-            else:
-                print("id exists", id)
+            id=int(row['ActionTypes_LookupID'])
+            desc = self.clean_string(row['ActionTypes_LookupDescription']) if row['ActionTypes_LookupDescription'] else ""
+            code1= self.clean_string(row['SupplCategoryLevel1Code']) if row['SupplCategoryLevel1Code'] else ""
+            code2= self.clean_string(row['SupplCategoryLevel2Code']) if row['SupplCategoryLevel2Code'] else ""
+            
             types.append((id, desc, code1, code2))
         
         self.insert_into_sqlite_table(types, "INSERT or IGNORE INTO %s VALUES (?,?,?,?)"% self.ACTION_TYPE.tablename)
-        print("inserted into action type table")
 
     def insert_into_appl_docs(self, data):
         docs  = []
         for row in data:
-            id = int(row[0])
-            docTypeId = int(row[1]) if row[1] else None
-            applNo = int(row[2]) if row[2] else None
-            subtype = self.clean_string(row[3]) if row[3] else ""
-            subno = int(row[4]) if row[4] else ""
-            appDocTitle = self.clean_string(row[5]) if row[5] else ""
-            applDocUrl = self.clean_string(row[6]) if row[6] else ""
-            applDate = self.clean_string(row[7]) if row[7] else ""
+            docsId = int(row['ApplicationDocsID'])
+            docTypeId = int(row['ApplicationDocsTypeID']) if row['ApplicationDocsTypeID'] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            subtype = self.clean_string(row['SubmissionType']) if row['SubmissionType'] else ""
+            subno = int(row['SubmissionNo']) if row['SubmissionNo'] else ""
+            appDocTitle = self.clean_string(row['ApplicationDocsTitle']) if row['ApplicationDocsTitle'] else ""
+            applDocUrl = self.clean_string(row['ApplicationDocsURL']) if row['ApplicationDocsURL'] else ""
+            applDate = self.clean_string(row['ApplicationDocsDate']) if row['ApplicationDocsDate'] else ""
 
-            docs.append((id, docTypeId, applNo, subtype, subno,
+            docs.append((docsId, docTypeId, applNo, subtype, subno,
                           appDocTitle, applDocUrl, applDate))
 
         self.insert_into_sqlite_table(
@@ -331,11 +293,10 @@ class FDAAPI(object):
         applications = []
 
         for row in data:
-            #ApplNo	ApplType ApplPublicNotes SponsorName
-            applNo = int(row[0]) if row[0] else None
-            appltype = self.clean_string(row[1]) if row[1] else ""
-            applPublicNotes = self.clean_string(row[2]) if row[2] else ""
-            sponsorName = self.clean_string(row[3]) if row[3] else ""
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            appltype = self.clean_string(row['ApplType']) if row['ApplType'] else ""
+            applPublicNotes = self.clean_string(row['ApplPublicNotes']) if row['ApplPublicNotes'] else ""
+            sponsorName = self.clean_string(row['SponsorName']) if row['SponsorName'] else ""
 
             applications.append((applNo, appltype, applPublicNotes,
                               sponsorName))
@@ -347,8 +308,8 @@ class FDAAPI(object):
         appl_doc_types = []
         
         for row in data:
-            id = int(row[0]) if row[0] else None
-            desc = self.clean_string(row[1]) if row[1] else ""
+            id = int(row['ApplicationDocsType_Lookup_ID']) if row['ApplicationDocsType_Lookup_ID'] else None
+            desc = self.clean_string(row['ApplicationDocsType_Lookup_Description']) if row['ApplicationDocsType_Lookup_Description'] else ""
             appl_doc_types.append((id,desc))
 
         self.insert_into_sqlite_table(
@@ -357,9 +318,9 @@ class FDAAPI(object):
     def insert_into_marketing_status(self, data):
         statuses = []
         for row in data:
-            id = int(row[0]) if row[0] else None
-            applNo = int(row[1]) if row[1] else None
-            productNo = int(row[2]) if row[2] else None
+            id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            productNo = int(row['ProductNo']) if row['ProductNo'] else None
             
             statuses.append((id, applNo, productNo))
 
@@ -369,8 +330,8 @@ class FDAAPI(object):
         statuses_lookup = []
 
         for row in data:
-            id = int(row[0]) if row[0] else None
-            desc = self.clean_string(row[1]) if row[1] else None
+            id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else None
+            desc = self.clean_string(row['MarketingStatusDescription']) if row['MarketingStatusDescription'] else None
 
             statuses_lookup.append((id, desc))
 
@@ -380,14 +341,14 @@ class FDAAPI(object):
     def insert_into_products(self, data):
         products = []
         for row in data:
-            applNo = int(row[0]) if row[0] else None
-            productNo = int(row[1]) if row[1] else None
-            form = self.clean_string(row[2]) if row[2] else None
-            strength = self.clean_string(row[3]) if row[3] else None
-            refdrug = self.clean_string(row[4]) if row[4] else None
-            drugName = self.clean_string(row[5]) if row[5] else None
-            activeIngredient = self.clean_string(row[6]) if row[6] else None
-            refstandard = self.clean_string(row[7]) if row[7] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            productNo = int(row['ProductNo']) if row['ProductNo'] else None
+            form = self.clean_string(row['Form']) if row['Form'] else None
+            strength = self.clean_string(row['Strength']) if row['Strength'] else None
+            refdrug = self.clean_string(row['ReferenceDrug']) if row['ReferenceDrug'] else None
+            drugName = self.clean_string(row['DrugName']) if row['DrugName'] else None
+            activeIngredient = self.clean_string(row['ActiveIngredient']) if row['ActiveIngredient'] else None
+            refstandard = self.clean_string(row['ReferenceStandard']) if row['ReferenceStandard'] else None
 
             products.append((applNo, productNo, form, strength, refdrug,
                           drugName, activeIngredient, refstandard))
@@ -398,9 +359,9 @@ class FDAAPI(object):
     def insert_into_submission_class_lookup(self, data):
         submission_class = []
         for row in data:
-            id = int(row[0]) if row[0] else None
-            code = self.clean_string(row[1]) if row[1] else None
-            desc = self.clean_string(row[2]) if row[2] else None
+            id = int(row['SubmissionClassCodeID']) if row['SubmissionClassCodeID'] else None
+            code = self.clean_string(row['SubmissionClassCode']) if row['SubmissionClassCode'] else None
+            desc = self.clean_string(row['SubmissionClassCodeDescription']) if row['SubmissionClassCodeDescription'] else None
 
             submission_class.append((id, code, desc))
         self.insert_into_sqlite_table(
@@ -409,14 +370,14 @@ class FDAAPI(object):
     def insert_into_submissions(self, data):
         submissions = []
         for row in data:
-            applNo = int(row[0]) if row[0] else None
-            subclasscodeId = int(row[1]) if row[1] else None
-            subType = self.clean_string(row[2]) if row[2] else None
-            subNo = int(row[3]) if row[3] else None
-            subStatus = self.clean_string(row[4]) if row[4] else None
-            subDate = self.clean_string(row[5]) if row[5] else None
-            subPublicNotes = self.clean_string(row[6]) if row[6] else None
-            reviewPriority = self.clean_string(row[7]) if row[7] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            subclasscodeId = int(row['SubmissionClassCodeID']) if row['SubmissionClassCodeID'] else None
+            subType = self.clean_string(row['SubmissionType']) if row['SubmissionType'] else None
+            subNo = int(row['SubmissionNo']) if row['SubmissionNo'] else None
+            subStatus = self.clean_string(row['SubmissionStatus']) if row['SubmissionStatus'] else None
+            subDate = self.clean_string(row['SubmissionStatusDate']) if row['SubmissionStatusDate'] else None
+            subPublicNotes = self.clean_string(row['SubmissionsPublicNotes']) if row['SubmissionsPublicNotes'] else None
+            reviewPriority = self.clean_string(row['ReviewPriority']) if row['ReviewPriority'] else None
 
             submissions.append((applNo, subclasscodeId, subType, subNo, subStatus, subDate, subPublicNotes, reviewPriority))
 
@@ -425,11 +386,11 @@ class FDAAPI(object):
     def insert_into_submission_property_type(self, data):
         submission_property_types = []
         for row in data:
-            applNo = int(row[0]) if row[0] else None
-            submissionType = self.clean_string(row[1]) if row[1] else None
-            submissionNo = int(row[2]) if row[2] else None
-            submissionTypeCode = self.clean_string(row[3]) if row[3] else None
-            submissionPropertyTypeID = int(row[4]) if row[4] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            submissionType = self.clean_string(row['SubmissionType']) if row['SubmissionType'] else None
+            submissionNo = int(row['SubmissionNo']) if row['SubmissionNo'] else None
+            submissionTypeCode = self.clean_string(row['SubmissionPropertyTypeCode']) if row['SubmissionPropertyTypeCode'] else None
+            submissionPropertyTypeID = int(row['SubmissionPropertyTypeID']) if row['SubmissionPropertyTypeID'] else None
             
             submission_property_types.append((applNo, submissionType, submissionNo, submissionTypeCode,
                             submissionPropertyTypeID))
@@ -441,10 +402,10 @@ class FDAAPI(object):
         te_data = []
         for row in data:
             #ApplNo	ProductNo	MarketingStatusID	TECode
-            applNo = int(row[0]) if row[0] else None
-            productNo = int(row[1]) if row[1] else None
-            marketing_status_id = int(row[2]) if row[2] else None
-            te = self.clean_string(row[3]) if row[3] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            productNo = int(row['ProductNo']) if row['ProductNo'] else None
+            marketing_status_id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else None
+            te = self.clean_string(row['TECode']) if row['TECode'] else None
             
             te_data.append((applNo, productNo, marketing_status_id, te))
 
@@ -453,28 +414,113 @@ class FDAAPI(object):
 
     #endregion
 
+    # region get
+    def get_products(self, application_no):
+        ## fill following data
+        # get product information
+        product_sql = """select distinct  p.drugName drugName, p.activeIngredient activeSubstance, p.strength strength, p.form form, x.description as 'marketingStatus', (case when te.teCode is NULL then 'None' else te.teCode end)  teCode,
+                (case when p.referenceDrug is '1' then 'Yes' else 'No' end) referenceListedDrug,
+                (case when p.referenceStandard is '1' then 'Yes' else 'No' end) referenceStandard,
+                p.productNo
+                from {product_tbl} p 
+                        left join(select ms.id, ms.applNo, ms_lkp.description, ms.productNo from {marketing_status_tbl} ms
+                        left join {marketing_status_lkp_tbl} ms_lkp on ms.id=ms_lkp.id) x
+                on p.applNo = x.applNo and p.productNo = x.productNo
+                left join {te_tbl} on p.applNo = te.applNo and p.productNo = te.productNo 
+                where p.applNo = {applNo}
+
+                """
+        product_sql = (product_sql.format(product_tbl = self.PRODUCT.tablename,
+            marketing_status_tbl = self.MARKETING_STATUS.tablename,
+            marketing_status_lkp_tbl = self.MARKETING_STATUS_LOOKUP.tablename,
+            te_tbl = self.TE.tablename,
+            applNo=application_no))
+    
+        product_rows = self.get_rows(product_sql)
+        products = []
+        for row in product_rows:
+            item = dict(row)     
+            product_info = {}   
+            for k, v in item.items():
+                if k not in product_info:
+                    product_info[k] = set()
+                if v is not None:
+                    product_info[k].add(v)
+            product_info = (dict([(k, v.pop()) if len(v) == 1 else(k, list(v)) for k, v in product_info.items()]))
+            products.append(product_info)
+        
+        return products
+
+    def get_submission(self, application_no, application_doc_type_id, submission_no):
+        ## supplement information query 
+        submission_sql = """
+        select distinct 
+		sub_class_lkp.submissionClassCode approvalTypeCode,
+		sub_class_lkp.submissionClassDescription approvalType,
+		sub.subStatus submissionStatus,
+		docs.docsTypeId documentTypeId,
+		docs.docTypeDesc documentTypeDesc,
+		date(sub.subDate) yearOfAuthorization,
+		sub.subPublicNotes submissionNotes,
+		sub.reviewPriority reviewPriority ,
+        (case when sub_prop_type.submissionPropertyTypeCode is NULL then '' when sub_prop_type.submissionPropertyTypeCode is 'Null' then '' else sub_prop_type.submissionPropertyTypeCode end) orphanDesignation,
+
+        from {submission_tbl} sub  left join {submission_class_lkp_tbl} sub_class_lkp on sub.subclasscodeId = sub_class_lkp.id
+        left join {submission_property_type_tbl} sub_prop_type on sub.applNo = sub_prop_type.applNo and sub.subNo = sub_prop_type.submissionNo
+        inner join (select docs.id,docs.submissionNo, docsTypeId, docs_lkp.description docTypeDesc, applNo, submissionType, applicationDocsTitle, applicationDocsURL, applicationDocsDate, description from {application_docs_tbl} docs
+        left join {application_docs_type_lookup_tbl} docs_lkp on docs.docsTypeId = docs_lkp.id) docs on docs.applNo = sub.applNo and docs.submissionNo = sub.subNo 
+        where sub.applNo = {applNo} and sub.subNo = {subNo} and docsTypeId={docsTypeId}
+        """
+        submission_sql = submission_sql.format(submission_tbl=self.SUBMISSION.tablename, submission_class_lkp_tbl=self.SUBMISSION_CLASS.tablename, submission_property_type_tbl=self.SUBMISSION_PROPERTY_TYPE.tablename,
+                                               application_docs_tbl=self.APPLICATION_DOC.tablename, application_docs_type_lookup_tbl=self.APPLICATION_DOC_TYPE.tablename, applNo=application_no,
+                                               subNo = submission_no,
+            docsTypeId=application_doc_type_id)
+        
+        
+        submission_row = self.get_row(submission_sql)
+        if submission_row is not None and len(submission_row)>0:
+            submission_info = dict(submission_row)
+        else:
+            submission_info = {}
+
+        return submission_info
+    # endregion
+   
     #region helpers
     def insert_into_sqlite_table(self, data, sql):
-        conn = self.conn
-        conn.cursor().executemany(sql, data)
-        conn.commit()
+        self.cursor.executemany(sql, data)
+        self.conn.commit()
 
     def read_metadata_file(self, filepath):
-        rows = []
-        split_line_into_words = lambda line: [w for w in line.split("\t")]
+        """Read data
 
+        Args:
+            filepath ([type]): [description]
+
+        Returns:
+            reader: return dictionary reader
+        """
         if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
-                for index, line in enumerate(f.readlines()):
-                    data = split_line_into_words(line)
-                    rows.append(data)
-        return rows[1:] # ignore header
+            rows = []
+            with open(filepath, 'r',encoding='windows-1252') as f:
+                reader = csv.DictReader(f, delimiter='\t', quoting=csv.QUOTE_NONE)
+                for row in reader:
+                    rows.append(row)
+                return rows
 
-    def check_table_exists(self, tablename):
-        return self.conn.execute("select count(*) from sqlite_master where type='table' and name=?", [tablename]).fetchone()[0]
+    def check_table_exists(self, table_name):
+        """Method to check if the table exists
+
+        Args:
+            table_name : name of the table
+
+        Returns:
+            1 if table else exists otherwise returns 0 if the table does not exists
+        """
+        return self.conn.execute("select count(*) from sqlite_master where type='table' and name=?", [table_name]).fetchone()[0]
     
-    def drop_table(tablename):
-        self.conn.execute("DROP TABLE [{}]".format(tablename))
+    def drop_table(self, table_name):
+        self.conn.execute("DROP TABLE [{}]".format(table_name))
 
     def get_total_rows(self, table_name):
         """Return total number of rows in the table
@@ -482,11 +528,9 @@ class FDAAPI(object):
         Args:
             table_name (string): name of the table
         """
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT Count(*) from {}".format(table_name))
-        count = cursor.fetchall()
-        print("\n Total rows:{}".format(count[0][0]))
-        return count[0][0]
+        count = self.conn.execute('select count(*) from "{}"'.format(table_name)).fetchone()[0]
+        self.logger.info("<{}: {} rows>".format(table_name,count))
+        return count
     
     ## Get sqlite row to the dictionary
     def sqlite_dict(self, cursor, row):
@@ -496,14 +540,15 @@ class FDAAPI(object):
         return d
 
     @classmethod
-    def clean_string(self,s):
+    def clean_string(self, s):
         bad_chars = [":",";"]
         s = s.rstrip(os.linesep)
-        #s = filter(lambda i: i not in bad_chars, s)
-        return s
+        return s.strip()
 
     #endregion
 
 
 api = FDAAPI(S3_metadata_loc=os.path.join("data", "metadata"))
-api.format_response(applicationNo=4782,submissionNo = 125, applicationDocTypeId = 1 )
+response = api.format_response(applicationNo=4782,submissionNo = 125, applicationDocTypeId = 1 )
+with open('fda.json', 'w') as outfile:
+    json.dump(response, outfile)

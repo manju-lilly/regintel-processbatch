@@ -3,7 +3,9 @@ Simple example API function.
 """
 import json
 from pydash import capitalize
+import os
 
+from fda_api import FDAAPI
 def lambda_handler(event, context):
     # Remove the following pylint line when you start to customize the code.
     # pylint: disable=line-too-long,unused-argument
@@ -21,7 +23,12 @@ def lambda_handler(event, context):
     API Gateway Lambda Proxy Output Format: dict
         Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
     """
-    
+
+
+    api = FDAAPI(S3_metadata_loc=os.path.join("data"))
+    api.format_response(applicationNo=4782, submissionNo=125,
+                    applicationDocTypeId=1)
+
     return {
         "statusCode": 200,
         "body": json.dumps({
