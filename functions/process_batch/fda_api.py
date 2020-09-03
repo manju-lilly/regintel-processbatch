@@ -37,9 +37,15 @@ class FDAAPI(object):
     SUBMISSION_CLASS = META_DATA_ITEM('submission_class', 'SubmissionClass_Lookup.txt')
     SUBMISSION_PROPERTY_TYPE = META_DATA_ITEM('submission_property_type', 'SubmissionPropertyType.txt')
     SUBMISSION = META_DATA_ITEM('submission', 'Submissions.txt')
-    TE = META_DATA_ITEM('te','TE.txt')
+    TE = META_DATA_ITEM('te', 'TE.txt')
+    
     # endregion
 
+    APPLICATION_TYPE_MAPPING = {'IND': 'Investigational New Drug Application','NDA':'New Drug Application', 'BLA': 'Biologic License Application','ANDA': 'Abbreviated New Drug,Application','OTC': 'Over-the-Counter'}
+
+    ## TODO: check with Suresh
+    APPROVED = "Approved"
+    
     def __init__(self, **kwargs):
         metadata_folder_loc = kwargs.get('S3_metadata_loc', '')
 
@@ -232,16 +238,15 @@ class FDAAPI(object):
 
         product_info = self.get_products(application_no)
         application_info = self.get_application(application_no)
-        submission_info = self.get_submission(appl_no, appl_doc_type_id, submission_no)
-        print(application_info)
-        print("--" * 10)
-        print(submission_info)
-        return
-
+        submission_info = self.get_submission(application_no, application_doc_type_id, submission_no)
+        
+    
+        
         # lambda helpers
-        extract_from_product_info = lambda x: list(set([v for item in product_info for k, v in item.items() if k == x]))
+        extract_from_product_info = lambda key, dict_items: list(set([self.extract_from_dict( key, item) for item in dict_items ])) 
         get_item = lambda l: l.pop() if len(l) == 1 else l                                         
         
+
         ## Construct response object
         ## build response object
         response = {}
@@ -250,30 +255,49 @@ class FDAAPI(object):
         response['source_url'] = url
         response['file_name'] = os.path.basename(s3_raw)
         response['data_source'] = 'FDA'
-        response['drug_name'] = get_item(extract_from_product_info("drugName"))
-        response['active_substance'] = extract_from_product_info("activeSubstance")
-        response['strength'] = extract_from_product_info("activeSubstance")
-        response['dosage_form'] = extract_from_product_info("form")
+        response['drug_name'] = get_item(extract_from_product_info("drug_name", product_info))
+        response['active_substance'] = extract_from_product_info("active_substance", product_info)
+        response['strength'] = extract_from_product_info("strength", product_info)
+        response['dosage_form'] = extract_from_product_info(
+            "dosage_form", product_info)
         response['therapeutic_area'] = ''
         response['therapeutic_indication'] = ''
+        response['year_of_authorization'] = self.extract_from_dict(
+            "yearOfAuthorization", submission_info)
+        response['license_holder'] = self.extract_from_dict('sponsorName', application_info)
+        response['route_of_administration'] = extract_from_product_info(
+            "dosage_form", product_info)
 
-        response['year_of_authorization'] = ''
-        response['license_holder'] = ''
-        response['route_of_administration'] = ''
+        ## TODO: check with Suresh again
         response['submission_date_for_initial_approval'] = ''
-        response['approval_type'] = ''
-        response['document_type'] = ''
-        response['approval_status'] = ''
-        response['orphan_designation'] = ''
         
-        return
+        ## NCE, Labeling etc.
+        response['approval_type'] = self.extract_from_dict('approvalType', submission_info)
+        response['document_type'] = self.extract_from_dict(
+            'documentTypeDesc', application_info)
 
-        """
-        ## Year of Authorization, License holder, Route Of Administration, Submission Date, Approval Type, Document Type, Approval Status
-        submission_info = self.get_submission_info(appl_no, appl_doc_type_id, submission_no)
+        ## TODO: check with Suresh again (EMA has Authorized/Withdrawn)
+        response['approval_status'] = self.APPROVED
+        response['orphan_designation'] = self.extract_from_dict(
+            'orphanDesignation', submission_info)
         
-        response = {**response, **product_info, **submission_info}
-        """
+        
+        fda = {}
+        fda['application_no'] = application_no
+        fda['submission_no'] = submission_no
+
+        fda['submission_type_id'] = application_doc_type_id
+        fda['submission_type_desc'] = self.extract_from_dict('submissionType',submission_info)
+
+        fda['approval_type_code'] = self.extract_from_dict( 'approvalTypeCode', submission_info)
+        fda['submission_status'] = self.extract_from_dict('submissionStatus', submission_info)
+        fda['submission_notes'] = self.extract_from_dict('submissionNotes', submission_info)
+        fda['review_priority'] = self.extract_from_dict(
+            'reviewPriority', submission_info)
+        fda['products'] = product_info
+
+        response['fda'] = fda
+        
         return response
 
     # region private methods to insert data
@@ -291,11 +315,11 @@ class FDAAPI(object):
         self.insert_into_sqlite_table(types, "INSERT or IGNORE INTO %s VALUES (?,?,?,?)"% self.ACTION_TYPE.tablename)
 
     def insert_into_appl_docs(self, data):
-        docs  = []
+        docs = []
         for row in data:
             docsId = int(row['ApplicationDocsID'])
-            docTypeId = int(row['ApplicationDocsTypeID']) if row['ApplicationDocsTypeID'] else None
-            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            docTypeId = int(row['ApplicationDocsTypeID']) if row['ApplicationDocsTypeID'] else ''
+            applNo = int(row['ApplNo']) if row['ApplNo'] else ''
             subtype = self.clean_string(row['SubmissionType']) if row['SubmissionType'] else ""
             subno = int(row['SubmissionNo']) if row['SubmissionNo'] else ""
             appDocTitle = self.clean_string(row['ApplicationDocsTitle']) if row['ApplicationDocsTitle'] else ""
@@ -312,7 +336,7 @@ class FDAAPI(object):
         applications = []
 
         for row in data:
-            applNo = int(row['ApplNo']) if row['ApplNo'] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else ''
             appltype = self.clean_string(row['ApplType']) if row['ApplType'] else ""
             applPublicNotes = self.clean_string(row['ApplPublicNotes']) if row['ApplPublicNotes'] else ""
             sponsorName = self.clean_string(row['SponsorName']) if row['SponsorName'] else ""
@@ -327,7 +351,7 @@ class FDAAPI(object):
         appl_doc_types = []
         
         for row in data:
-            id = int(row['ApplicationDocsType_Lookup_ID']) if row['ApplicationDocsType_Lookup_ID'] else None
+            id = int(row['ApplicationDocsType_Lookup_ID']) if row['ApplicationDocsType_Lookup_ID'] else ''
             desc = self.clean_string(row['ApplicationDocsType_Lookup_Description']) if row['ApplicationDocsType_Lookup_Description'] else ""
             appl_doc_types.append((id,desc))
 
@@ -337,9 +361,9 @@ class FDAAPI(object):
     def insert_into_marketing_status(self, data):
         statuses = []
         for row in data:
-            id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else None
-            applNo = int(row['ApplNo']) if row['ApplNo'] else None
-            productNo = int(row['ProductNo']) if row['ProductNo'] else None
+            id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else ''
+            applNo = int(row['ApplNo']) if row['ApplNo'] else ''
+            productNo = int(row['ProductNo']) if row['ProductNo'] else ''
             
             statuses.append((id, applNo, productNo))
 
@@ -349,8 +373,8 @@ class FDAAPI(object):
         statuses_lookup = []
 
         for row in data:
-            id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else None
-            desc = self.clean_string(row['MarketingStatusDescription']) if row['MarketingStatusDescription'] else None
+            id = int(row['MarketingStatusID']) if row['MarketingStatusID'] else ''
+            desc = self.clean_string(row['MarketingStatusDescription']) if row['MarketingStatusDescription'] else ''
 
             statuses_lookup.append((id, desc))
 
@@ -360,14 +384,14 @@ class FDAAPI(object):
     def insert_into_products(self, data):
         products = []
         for row in data:
-            applNo = int(row['ApplNo']) if row['ApplNo'] else None
-            productNo = int(row['ProductNo']) if row['ProductNo'] else None
-            form = self.clean_string(row['Form']) if row['Form'] else None
-            strength = self.clean_string(row['Strength']) if row['Strength'] else None
-            refdrug = self.clean_string(row['ReferenceDrug']) if row['ReferenceDrug'] else None
-            drugName = self.clean_string(row['DrugName']) if row['DrugName'] else None
-            activeIngredient = self.clean_string(row['ActiveIngredient']) if row['ActiveIngredient'] else None
-            refstandard = self.clean_string(row['ReferenceStandard']) if row['ReferenceStandard'] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else ''
+            productNo = int(row['ProductNo']) if row['ProductNo'] else ''
+            form = self.clean_string(row['Form']) if row['Form'] else ''
+            strength = self.clean_string(row['Strength']) if row['Strength'] else ''
+            refdrug = self.clean_string(row['ReferenceDrug']) if row['ReferenceDrug'] else ''
+            drugName = self.clean_string(row['DrugName']) if row['DrugName'] else ''
+            activeIngredient = self.clean_string(row['ActiveIngredient']) if row['ActiveIngredient'] else ''
+            refstandard = self.clean_string(row['ReferenceStandard']) if row['ReferenceStandard'] else ''
 
             products.append((applNo, productNo, form, strength, refdrug,
                           drugName, activeIngredient, refstandard))
@@ -378,9 +402,9 @@ class FDAAPI(object):
     def insert_into_submission_class_lookup(self, data):
         submission_class = []
         for row in data:
-            id = int(row['SubmissionClassCodeID']) if row['SubmissionClassCodeID'] else None
-            code = self.clean_string(row['SubmissionClassCode']) if row['SubmissionClassCode'] else None
-            desc = self.clean_string(row['SubmissionClassCodeDescription']) if row['SubmissionClassCodeDescription'] else None
+            id = int(row['SubmissionClassCodeID']) if row['SubmissionClassCodeID'] else ''
+            code = self.clean_string(row['SubmissionClassCode']) if row['SubmissionClassCode'] else ''
+            desc = self.clean_string(row['SubmissionClassCodeDescription']) if row['SubmissionClassCodeDescription'] else ''
 
             submission_class.append((id, code, desc))
         self.insert_into_sqlite_table(
@@ -389,14 +413,15 @@ class FDAAPI(object):
     def insert_into_submissions(self, data):
         submissions = []
         for row in data:
-            applNo = int(row['ApplNo']) if row['ApplNo'] else None
-            subclasscodeId = int(row['SubmissionClassCodeID']) if row['SubmissionClassCodeID'] else None
-            subType = self.clean_string(row['SubmissionType']) if row['SubmissionType'] else None
-            subNo = int(row['SubmissionNo']) if row['SubmissionNo'] else None
-            subStatus = self.clean_string(row['SubmissionStatus']) if row['SubmissionStatus'] else None
-            subDate = self.clean_string(row['SubmissionStatusDate']) if row['SubmissionStatusDate'] else None
-            subPublicNotes = self.clean_string(row['SubmissionsPublicNotes']) if row['SubmissionsPublicNotes'] else None
-            reviewPriority = self.clean_string(row['ReviewPriority']) if row['ReviewPriority'] else None
+            applNo = int(row['ApplNo']) if row['ApplNo'] else ''
+            subclasscodeId = int(row['SubmissionClassCodeID']) if row['SubmissionClassCodeID'] else ''
+            subType = self.clean_string(row['SubmissionType']) if row['SubmissionType'] else ''
+            subNo = int(row['SubmissionNo']) if row['SubmissionNo'] else ''
+            subStatus = self.clean_string(row['SubmissionStatus']) if row['SubmissionStatus'] else ''
+            subDate = self.clean_string(row['SubmissionStatusDate']) if row['SubmissionStatusDate'] else ''
+            subPublicNotes = self.clean_string(row['SubmissionsPublicNotes']) if row['SubmissionsPublicNotes'] else ''
+            reviewPriority = self.clean_string(
+                row['ReviewPriority']) if row['ReviewPriority'] else ''
 
             submissions.append((applNo, subclasscodeId, subType, subNo, subStatus, subDate, subPublicNotes, reviewPriority))
 
@@ -437,10 +462,10 @@ class FDAAPI(object):
     def get_products(self, application_no):
         ## fill following data
         # get product information
-        product_sql = """select distinct  p.drugName drugName, p.activeIngredient activeSubstance, p.strength strength, p.form form, x.description as 'marketingStatus', (case when te.teCode is NULL then 'None' else te.teCode end)  teCode,
-                (case when p.referenceDrug is '1' then 'Yes' else 'No' end) referenceListedDrug,
-                (case when p.referenceStandard is '1' then 'Yes' else 'No' end) referenceStandard,
-                p.productNo
+        product_sql = """select distinct  p.drugName 'drug_name', p.activeIngredient 'active_substance', p.strength strength, p.form 'dosage_form', x.description as 'marketing_status', (case when te.teCode is NULL then 'None' else te.teCode end)  'therapeutic_equivalence_codes',
+                (case when p.referenceDrug is '1' then 'Yes' else 'No' end) 'reference_drug',
+                (case when p.referenceStandard is '1' then 'Yes' else 'No' end) 'reference_standard',
+                p.productNo as 'product_number'
                 from {product_tbl} p 
                         left join(select ms.id, ms.applNo, ms_lkp.description, ms.productNo from {marketing_status_tbl} ms
                         left join {marketing_status_lkp_tbl} ms_lkp on ms.id=ms_lkp.id) x
@@ -484,6 +509,7 @@ class FDAAPI(object):
 		sub.subPublicNotes submissionNotes,
 		sub.reviewPriority reviewPriority ,
         (case when sub_prop_type.submissionPropertyTypeCode is NULL then '' when sub_prop_type.submissionPropertyTypeCode is 'Null' then '' else sub_prop_type.submissionPropertyTypeCode end) orphanDesignation,
+        sub.subType as submissionType
 
         from {submission_tbl} sub  left join {submission_class_lkp_tbl} sub_class_lkp on sub.subclasscodeId = sub_class_lkp.id
         left join {submission_property_type_tbl} sub_prop_type on sub.applNo = sub_prop_type.applNo and sub.subNo = sub_prop_type.submissionNo
@@ -506,7 +532,6 @@ class FDAAPI(object):
         return submission_info
     
     def get_application(self, application_no):
-
         """ Function to retrieve application information from application table
         Args:
             application_no (int): application no
@@ -515,12 +540,16 @@ class FDAAPI(object):
             [type]: [description]
         """
         application_sql = "select * from {table_name} where applNo = {application_no} ".format(table_name=self.APPLICATION.tablename,
-                                                                                               application_no=application_no)
+                       application_no=application_no)
         
         application_row = self.get_row(application_sql)
 
         if application_row is not None and len(application_row) > 0:
             application_info = dict(application_row)
+
+            ## map application doc type 
+            application_info['documentType'] = self.APPLICATION_TYPE_MAPPING.get(application_info['applType'], '')
+        
         else:
             application_info = {}
 
@@ -588,6 +617,18 @@ class FDAAPI(object):
         s = s.rstrip(os.linesep)
         return s.strip()
 
+    ## extract from nested dictionary
+    def extract_from_dict(self, my_key,dictionary_items):
+        found_value = ''
+        for key, value in dictionary_items.items():
+            if type(value) is dict:
+                self.extract_from_dict(my_key,value)
+            else:
+                if key == my_key:
+                    found_value = value
+        
+        return found_value
+                    
     #endregion
 
 
