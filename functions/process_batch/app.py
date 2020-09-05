@@ -1,37 +1,47 @@
-"""
-Simple example API function.
-"""
+#!/usr/bin/env python
+from __future__ import print_function
+
+import boto3
 import json
-from pydash import capitalize
+import time
 import os
+import logging
 
-from fda_api import FDAAPI
+from botocore.exceptions import ClientError
+
+from urllib.parse import unquote_plus
+from bs4 import BeautifulSoup
+import traceback
+import re
+
+import utils
+
+## Initialize logging
+logger = logging.getLogger()
+utils.load_log_config()
+
+# Read configuration
+configuration = utils.load_osenv()
+logging.info(f"read configuration:{len(configuration)}")
+
+
+# initialize AWS services
+S3_CLIENT = boto3.client('s3')
+S3_RESOURCE = boto3.resource('s3')
+
 def lambda_handler(event, context):
-    # Remove the following pylint line when you start to customize the code.
-    # pylint: disable=line-too-long,unused-argument
-    """Sample pure Lambda function
-    Parameters
-    ----------
-    event: dict, required
-        API Gateway Lambda Proxy Input Format
-        Event doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-input-format
-    context: object, required
-        Lambda Context runtime methods and attributes
-        Context doc: https://docs.aws.amazon.com/lambda/latest/dg/python-context-object.html
-    Returns
-    ------
-    API Gateway Lambda Proxy Output Format: dict
-        Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
     """
-
-
-    api = FDAAPI(S3_metadata_loc=os.path.join("data"))
-    api.format_response(applicationNo=4782, submissionNo=125,
-                    applicationDocTypeId=1)
+    Method trigger file and construct events 
+    
+    :param event
+    :param context
+    
+    """
+    
 
     return {
         "statusCode": 200,
         "body": json.dumps({
             "message": capitalize("hello world")
-        }),
+        }) 
     }

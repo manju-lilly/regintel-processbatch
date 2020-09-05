@@ -363,4 +363,5 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+.vscode
 # End of https://www.gitignore.io/api/vim,git,node,macos,linux,emacs,python,windows,visualstudiocode
