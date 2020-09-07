@@ -12,8 +12,6 @@ import uuid
 
 from custom_log_formatter import CustomLogFormatter
 
-## Load logger
-logger = load_log_config()
 
 def load_osenv():
     """
@@ -24,10 +22,12 @@ def load_osenv():
     config = {}
     for key in os.environ.keys():
         config[key] = os.getenv(key, "")
-    
+
     return config
 
 # Ref: citeline
+
+
 def load_log_config():
     """
     Configure custom logformatter
@@ -36,8 +36,9 @@ def load_log_config():
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    formatter = CustomLogFormatter('[%(levelname)s]\t%(asctime)s.%(msecs)dZ\t%(levelno)s\t%(message)s\n','%Y-%m-%dT%H:%M:%S')
-    
+    formatter = CustomLogFormatter(
+        '[%(levelname)s]\t%(asctime)s.%(msecs)dZ\t%(levelno)s\t%(message)s\n', '%Y-%m-%dT%H:%M:%S')
+
     if logger.hasHandlers():
         logger.debug("using default lambda log handler")
         log_handler = logger.handlers[0]
@@ -56,7 +57,7 @@ def load_log_config():
     ## set loglevel
     boto3.set_stream_logger('botocore', logging.WARNING)
     boto3.set_stream_logger('boto3', logging.WARNING)
-    
+
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('s3transfer').setLevel(logging.WARNING)
 
@@ -73,6 +74,8 @@ def make_unique_id():
     return str(id)
 
 ## Ref: citeline
+
+
 def split_s3_url(s3_object_url):
     """Method to slit s3 url into its component parts
 
@@ -86,8 +89,12 @@ def split_s3_url(s3_object_url):
 
     """
     # remove s3://
-    s3_object_url = s3_object_url.replce("s3://", "")
-    
+
+    ## Load logger
+    logger = load_log_config()
+
+    s3_object_url = s3_object_url.replace("s3://", "")
+
     s3_parts = s3_object_url.split("/")
     bucket_name = s3_parts[0]
 
@@ -107,21 +114,26 @@ def read_obj_from_bucket(object_path):
     Args:
         object_path (str): s3 object path
     """
-    
+
     ## path
+    logger = load_log_config()
+
     logger.info(f"Reading from: {object_path}")
 
     client = boto3.resource("s3")
 
     bucket_name, prefix, filename = split_s3_url(object_path)
-    s3_object = client.Object(bucket_name=bucket_name, key=filename)
-    
+
+    s3_object = client.Object(bucket_name=bucket_name, key=prefix)
+
     try:
         content = s3_object.get()
-        logger.info(f"{content['ContentLength']} bytes read from the s3 object: {object_path}")
+        logger.info(
+            f"{content['ContentLength']} bytes read from the s3 object: {object_path}")
 
     except ClientError as e:
         logger.exception(f"failed to read contents of the file: {object_path}")
-        raise 
+        raise
 
-    return content 
+    return content
+

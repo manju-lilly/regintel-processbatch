@@ -12,12 +12,11 @@ from functools import reduce
 import logging
 from collections import namedtuple
 
-from utils import load_log_config, make_unique_id
+from utils import load_log_config, make_unique_id, read_obj_from_bucket
 
 META_DATA_ITEM = namedtuple("META_DATA_ITEM", 'tablename filename')
 
-# initialize logging - globally
-load_log_config()
+
 
 class FDAAPI(object):
     """
@@ -56,7 +55,7 @@ class FDAAPI(object):
         self.engine_url = ":memory:"
         
         # setup logger
-        self.logger = logging.getLogger('process_batch')
+        self.logger = load_log_config()
         self.conn, self.cursor = self.create_connection()
 
         result = self.create_tables()
@@ -563,7 +562,7 @@ class FDAAPI(object):
         self.cursor.executemany(sql, data)
         self.conn.commit()
 
-    def read_metadata_file(self, filepath):
+    def read_metadata_file(self, filepath, aws_env = True):
         """Read data
 
         Args:
@@ -572,13 +571,25 @@ class FDAAPI(object):
         Returns:
             reader: return dictionary reader
         """
-        if os.path.exists(filepath):
-            rows = []
-            with open(filepath, 'r',encoding='windows-1252') as f:
-                reader = csv.DictReader(f, delimiter='\t', quoting=csv.QUOTE_NONE)
-                for row in reader:
-                    rows.append(row)
-                return rows
+        if not aws_env:
+            if os.path.exists(filepath):
+                rows = []
+                with open(filepath, 'r',encoding='windows-1252') as f:
+                    reader = csv.DictReader(f, delimiter='\t', quoting=csv.QUOTE_NONE)
+                    for row in reader:
+                        rows.append(row)
+                    return rows
+
+        response = read_obj_from_bucket(filepath)
+
+        # split the contents of the file
+        content = response['Body'].read().decode('utf-8')
+        lines = content.split("\n")
+        reader = csv.DictReader(f, delimiter='\t', quoting=csv.QUOTE_NONE)
+        for row in reader:
+            rows.append(row)
+
+        return rows
 
     def check_table_exists(self, table_name):
         """Method to check if the table exists
@@ -630,9 +641,3 @@ class FDAAPI(object):
         return found_value
                     
     #endregion
-
-
-api = FDAAPI(S3_metadata_loc=os.path.join("data", "metadata"))
-response = api.format_response(application_no=4782,submission_no = 125, application_doc_type_id = 1 )
-with open('fda.json', 'w') as outfile:
-    json.dump(response, outfile)
