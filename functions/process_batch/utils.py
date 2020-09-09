@@ -137,3 +137,19 @@ def read_obj_from_bucket(object_path):
 
     return content
 
+
+def get_chunks(reader, chunk_size=1):
+    """Returns chunks array from csv file
+
+    Args:
+        lines ([type]): [description]
+        chunk_size (int, optional): [description]. Defaults to 10.
+    """
+    ## filter empty lines
+    chunk = []
+    for index, line in enumerate(reader):
+        if (index % chunk_size == 0 and index > 0):
+            yield chunk
+            del chunk[:]
+        chunk.append(line)
+    yield chunk
