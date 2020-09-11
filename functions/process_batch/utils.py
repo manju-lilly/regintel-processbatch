@@ -93,7 +93,7 @@ def split_s3_url(s3_object_url):
     ## Load logger
     logger = load_log_config()
 
-    s3_object_url = s3_object_url.replace("s3://", "")
+    s3_object_url = s3_object_url.replace("s3://", "") if "s3://" in s3_object_url else s3_object_url
 
     s3_parts = s3_object_url.split("/")
     bucket_name = s3_parts[0]
@@ -120,10 +120,10 @@ def read_obj_from_bucket(object_path):
 
     logger.info(f"Reading from: {object_path}")
 
+
     client = boto3.resource("s3")
 
     bucket_name, prefix, filename = split_s3_url(object_path)
-
     s3_object = client.Object(bucket_name=bucket_name, key=prefix)
 
     try:

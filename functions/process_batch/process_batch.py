@@ -47,13 +47,13 @@ def handler(event, context):
     
     """
     logging.info(" in process delta lambda function")
-    print(event)
+    
 
     stage = event['parameters']['stage']
     bucket_name = event['parameters']['bucket_name']
 
     ## check stats
-    total_records_process = event['process_batch_stats']['number_of_records_to_process']
+    total_records_process = event['process_batch_stats']['number_of_records_to_process'] if 'process_batch_stats' in event else 0
     if total_records_process == 0:
         ## notify to user process complete nothing to process
         return {
@@ -68,8 +68,8 @@ def handler(event, context):
     logging.info(f"s3 path to the metadata file:{s3_metadata_file_path}")
 
     delta_file_records = event['chunks']
-
-    api = FDAAPI(S3_metadata_loc=s3_metadata_file_path)
+    is_test = True if "test" in event else False
+    api = FDAAPI(S3_metadata_loc=s3_metadata_file_path, test=is_test)
 
     '''
      'appplication_docs_type_id': row[0],
@@ -87,7 +87,7 @@ def handler(event, context):
             submission_type=row['submission_type'], s3_raw=row['s3_path'], url=row['application_docs_url'])
 
         ## Put an event
-        print(json.dumps(fda_metadata, indent=4))
+        
         response = CLOUDWATCH_EVENTS.put_events(
             Entries=[
                 {

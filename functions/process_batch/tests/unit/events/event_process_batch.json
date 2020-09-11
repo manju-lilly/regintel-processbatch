@@ -1,0 +1,123 @@
+{
+    "s3_delta_file_path": "data/deltafile.csv",
+    "s3_metadata_file_path": "data/metadata/",
+    "test": "true",
+    "parameters": {
+        "stage": "DEV",
+        "bucket_name": "Test",
+        "s3_metadata_file_path": "data/metadata/",
+        "s3_delta_file_path": "data/deltafile.csv"
+    },
+    "fda": {
+        "process_batch_stats": {
+            "process_batch_start_timestamp": "2020-09-11 11:33:39:853554",
+            "process_batch_end_timestamp": null,
+            "stepfunction-execution-counter": 1,
+            "number_of_records_to_process": 10
+        },
+        "chunks": [
+            [
+                {
+                    "appplication_docs_type_id": "1",
+                    "application_no": "4782",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "125",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/appletter/2003/04782slr125ltr.pdf",
+                    "drug_name": "PREMARIN",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/premarin/4782/suppl/125/"
+                },
+                {
+                    "appplication_docs_type_id": "1",
+                    "application_no": "5378",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "30",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/appletter/2015/005378Orig1s030ltr.pdf",
+                    "drug_name": "DESOXYN",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/desoxyn/5378/suppl/30/"
+                }
+            ],
+            [
+                {
+                    "appplication_docs_type_id": "3",
+                    "application_no": "6035",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "78",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/nda/2012/006035Orig1S078.pdf",
+                    "drug_name": "METHERGINE",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/methergine/6035/suppl/78/"
+                },
+                {
+                    "appplication_docs_type_id": "1",
+                    "application_no": "5619",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "21",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/appletter/2011/005619s021ltr.pdf",
+                    "drug_name": "AMINOHIPPURATE SODIUM",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/aminohippurate_sodium/5619/suppl/21/"
+                }
+            ],
+            [
+                {
+                    "appplication_docs_type_id": "2",
+                    "application_no": "5856",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "21",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/label/2012/005856s021lbl.pdf",
+                    "drug_name": "TRIDIONE",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/tridione/5856/suppl/21/"
+                },
+                {
+                    "appplication_docs_type_id": "2",
+                    "application_no": "5929",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "33",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/label/2002/05929s32s33lbl.pdf",
+                    "drug_name": "D.H.E. 45",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/d.h.e._45/suppl/33/"
+                }
+            ],
+            [
+                {
+                    "appplication_docs_type_id": "1",
+                    "application_no": "6002",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "42",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/appletter/2009/006002s042ltr.pdf",
+                    "drug_name": "ARALEN HYDROCHLORIDE",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/aralen_hydrochloride/6002/suppl/42/"
+                },
+                {
+                    "appplication_docs_type_id": "2",
+                    "application_no": "7337",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "45",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/label/2010/007337s045lbl.pdf",
+                    "drug_name": "PERCODAN",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/percodan/7337/suppl/45/"
+                }
+            ],
+            [
+                {
+                    "appplication_docs_type_id": "1",
+                    "application_no": "3444",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "20",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/appletter/2003/03444slr020ltr.pdf",
+                    "drug_name": "DRISDOL",
+                    "s3_path": "s3://lly-edp-raw-us-east-2-<env>/mdit/fda/data/inbound/approved_drugs/drisdol/3444/suppl/20/"
+                }
+            ],
+            [
+                {
+                    "appplication_docs_type_id": "1",
+                    "application_no": "4782",
+                    "submission_type": "SUPPL     ",
+                    "submission_no": "136",
+                    "application_docs_url": "http://www.accessdata.fda.gov/drugsatfda_docs/appletter/2004/04782slr133,136ltr.pdf",
+                    "drug_name": "",
+                    "s3_path": ""
+                }
+            ]
+        ]
+    }
+}

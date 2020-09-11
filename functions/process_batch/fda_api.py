@@ -59,6 +59,8 @@ class FDAAPI(object):
         self.metadata_folder_loc = metadata_folder_loc
         self.engine_url = ":memory:"
 
+        self.is_test = True if 'test' in kwargs else False
+
         # setup logger
         self.logger = load_log_config()
         self.conn, self.cursor = self.create_connection()
@@ -629,7 +631,7 @@ class FDAAPI(object):
         self.cursor.executemany(sql, data)
         self.conn.commit()
 
-    def read_metadata_file(self, filepath, aws_env=True):
+    def read_metadata_file(self, filepath):
         """Read data
 
         Args:
@@ -638,7 +640,7 @@ class FDAAPI(object):
         Returns:
             reader: return dictionary reader
         """
-        if not aws_env:
+        if self.is_test:
             if os.path.exists(filepath):
                 rows = []
                 with open(filepath, 'r', encoding='windows-1252') as f:

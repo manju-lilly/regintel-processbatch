@@ -4,6 +4,8 @@ import logging
 import json
 
 ## Format logger
+
+
 class CustomLogFormatter(logging.Formatter):
 
     def format(self, record):

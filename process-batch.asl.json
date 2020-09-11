@@ -1,0 +1,23 @@
+{
+  "Comment": "A Catch example of the Amazon States Language using an AWS Lambda Function",
+  "StartAt": "Load Parameters",
+  "States": {
+    "Load Parameters": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-2:896265685124:function:regintel-dev-load-parameters",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "Notify Failure"
+        }
+      ],
+      "End": true
+    },
+    "Notify Failure": {
+      "Type": "Task",
+      "Resource":"arn:aws:lambda:us-east-2:896265685124:function:regintel-dev-notify-failure-to-operations-user",
+      "End": true
+    }
+  }
+}
