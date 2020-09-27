@@ -180,3 +180,7 @@ def get_s3_objects(bucket, prefix='', suffix='.csv'):
 
 def make_s3_uri(bucket_name, key):
     return 's3://' + bucket_name + "/" + key
+
+
+def pretty_print_json(json_obj):
+    return "{}".format(json.dumps(json_obj, indent=4, separators=(',',':'), default=str))
