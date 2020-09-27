@@ -2,7 +2,7 @@
 
 import os
 import csv 
-
+from datetime import datetime
 
 def get_chunks(reader, chunk_size=1):
     """Returns chunks array from csv file
@@ -20,7 +20,7 @@ def get_chunks(reader, chunk_size=1):
         chunk.append(line)
     yield chunk
     
-
+"""
 delta_csv = os.path.join("data", "deltafile.csv")
 with open(delta_csv, 'r', encoding='windows-1252') as fin:
     reader = csv.DictReader((line for line in fin if not line.isspace() and not line.replace(",","").isspace()),
@@ -47,5 +47,16 @@ with open(delta_csv, 'r', encoding='windows-1252') as fin:
 
     print(len(chunks))
         
+"""
+
+
+month = str('%02d' % datetime.now().month)
+year = str(datetime.now().year)
+day = str('%02d' % datetime.now().day)
+hour = str('%02d' % datetime.now().hour)
+minute = str('%02d' % datetime.now().minute)
+second = str('%02d' % datetime.now().second)
+
+print(month, year, day, hour, minute, second)
 
  

@@ -23,7 +23,8 @@ def handler(event, context):
 
     # send an email to the operations user - request folder + data received
     operations_notification_arn = os.environ['OPERATIONS_NOTIFICATION_ARN']
-    email_subject = 'Job Complete - Folder - ' + directory_name
+    delta_file_path = event["s3_delta_file_path"]
+    email_subject = 'Job Completed : Process Batch FDA : ' + delta_file_path
     email_body = json.dumps(event, indent=2)
 
     sns.publish(

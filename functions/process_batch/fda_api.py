@@ -47,7 +47,7 @@ class FDAAPI(object):
     APPLICATION_TYPE_MAPPING = {'IND': 'Investigational New Drug Application', 'NDA': 'New Drug Application',
                                 'BLA': 'Biologic License Application', 'ANDA': 'Abbreviated New Drug,Application', 'OTC': 'Over-the-Counter'}
 
-    ## TODO: check with Suresh
+    # TODO: check with Suresh
     APPROVED = "Approved"
 
     def __init__(self, **kwargs):
@@ -185,45 +185,45 @@ class FDAAPI(object):
         """
         insert metadata
         """
-        ## ActionTypes
+        # ActionTypes
         num_rows = self.insert_action_type(self.read_metadata_file(os.path.join(
             self.metadata_folder_loc, self.ACTION_TYPE.filename)))
 
         self.logger.info(
             f"inserted into action type, no of rows: {num_rows} inserted")
 
-        ## ApplicationDocs
+        # ApplicationDocs
         self.insert_into_appl_docs(self.read_metadata_file(os.path.join(
             self.metadata_folder_loc, self.APPLICATION_DOC.filename)))
         print("inserted into application docs")
 
-        ## Applications
+        # Applications
         self.insert_into_appl(self.read_metadata_file(os.path.join(
             self.metadata_folder_loc, self.APPLICATION.filename)))
         print("inserted into applications")
 
-        ## application doc type
+        # application doc type
         self.insert_into_appl_docs_type(self.read_metadata_file(os.path.join(
             self.metadata_folder_loc, self.APPLICATION_DOC_TYPE.filename)))
         print("inserted into application doc type")
 
-        ## marketing
+        # marketing
         self.insert_into_marketing_status(self.read_metadata_file(
             os.path.join(self.metadata_folder_loc, self.MARKETING_STATUS.filename)))
 
-        ## marketing status
+        # marketing status
         self.insert_into_marketing_status_lookup(self.read_metadata_file(
             os.path.join(self.metadata_folder_loc, self.MARKETING_STATUS_LOOKUP.filename)))
 
-        ## products
+        # products
         self.insert_into_products(self.read_metadata_file(
             os.path.join(self.metadata_folder_loc, self.PRODUCT.filename)))
 
-        ## submission class lookup
+        # submission class lookup
         self.insert_into_submission_class_lookup(self.read_metadata_file(
             os.path.join(self.metadata_folder_loc, self.SUBMISSION_CLASS.filename)))
 
-        ## submission property type
+        # submission property type
         self.insert_into_submission_property_type(self.read_metadata_file(
             os.path.join(self.metadata_folder_loc, self.SUBMISSION_PROPERTY_TYPE.filename)))
 
@@ -268,8 +268,8 @@ class FDAAPI(object):
 
         def get_item(l): return l.pop() if len(l) == 1 else l
 
-        ## Construct response object
-        ## build response object
+        # Construct response object
+        # build response object
         response = {}
         response['s3_raw'] = s3_raw
         response['last_updated'] = last_updated
@@ -293,16 +293,16 @@ class FDAAPI(object):
         response['route_of_administration'] = extract_from_product_info(
             "dosage_form", product_info)
 
-        ## TODO: check with Suresh again
+        # TODO: check with Suresh again
         response['submission_date_for_initial_approval'] = ''
 
-        ## NCE, Labeling etc.
+        # NCE, Labeling etc.
         response['approval_type'] = self.extract_from_dict(
             'approvalType', submission_info)
         response['document_type'] = self.extract_from_dict(
             'documentTypeDesc', application_info)
 
-        ## TODO: check with Suresh again (EMA has Authorized/Withdrawn)
+        # TODO: check with Suresh again (EMA has Authorized/Withdrawn)
         response['approval_status'] = self.APPROVED
         response['orphan_designation'] = self.extract_from_dict(
             'orphanDesignation', submission_info)
@@ -511,7 +511,7 @@ class FDAAPI(object):
     def insert_into_te(self, data):
         te_data = []
         for row in data:
-            #ApplNo	ProductNo	MarketingStatusID	TECode
+            # ApplNo	ProductNo	MarketingStatusID	TECode
             applNo = int(row['ApplNo']) if row['ApplNo'] else None
             productNo = int(row['ProductNo']) if row['ProductNo'] else None
             marketing_status_id = int(
@@ -523,11 +523,11 @@ class FDAAPI(object):
         self.insert_into_sqlite_table(
             te_data, "INSERT or IGNORE INTO %s VALUES (?,?,?,?)" % self.TE.tablename)
 
-    #endregion
+    # endregion
 
     # region get
     def get_products(self, application_no):
-        ## fill following data
+        # fill following data
         # get product information
         product_sql = """select distinct  p.drugName 'drug_name', p.activeIngredient 'active_substance', p.strength strength, p.form 'dosage_form', x.description as 'marketing_status', (case when te.teCode is NULL then 'None' else te.teCode end)  'therapeutic_equivalence_codes',
                 (case when p.referenceDrug is '1' then 'Yes' else 'No' end) 'reference_drug',
@@ -565,7 +565,7 @@ class FDAAPI(object):
         return products
 
     def get_submission(self, application_no, application_doc_type_id, submission_no):
-        ## supplement information query
+        # supplement information query
         submission_sql = """
         select distinct 
 		sub_class_lkp.submissionClassCode approvalTypeCode,
@@ -614,7 +614,7 @@ class FDAAPI(object):
         if application_row is not None and len(application_row) > 0:
             application_info = dict(application_row)
 
-            ## map application doc type
+            # map application doc type
             application_info['documentType'] = self.APPLICATION_TYPE_MAPPING.get(
                 application_info['applType'], '')
 
@@ -625,7 +625,7 @@ class FDAAPI(object):
 
     # endregion
 
-    #region helpers
+    # region helpers
 
     def insert_into_sqlite_table(self, data, sql):
         self.cursor.executemany(sql, data)
@@ -689,7 +689,7 @@ class FDAAPI(object):
         self.logger.info("<{}: {} rows>".format(table_name, count))
         return count
 
-    ## Get sqlite row to the dictionary
+    # Get sqlite row to the dictionary
     def sqlite_dict(self, cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
@@ -702,7 +702,7 @@ class FDAAPI(object):
         s = s.rstrip(os.linesep)
         return s.strip()
 
-    ## extract from nested dictionary
+    # extract from nested dictionary
     def extract_from_dict(self, my_key, dictionary_items):
         found_value = ''
         for key, value in dictionary_items.items():
@@ -714,4 +714,4 @@ class FDAAPI(object):
 
         return found_value
 
-    #endregion
+    # endregion

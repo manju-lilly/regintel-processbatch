@@ -20,7 +20,7 @@ def handler(event, context):
     metadata_path = event["s3_metadata_file_path"]
     delta_file_path = event["s3_delta_file_path"]
 
-    email_subject = 'Job Failed : Process Batch FDA : ' + directory_name
+    email_subject = 'Job Failed : Process Batch FDA : ' + delta_file_path
     email_body = json.dumps(event, indent=2)
 
     sns.publish(

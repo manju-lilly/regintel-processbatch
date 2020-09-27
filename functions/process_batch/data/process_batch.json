@@ -6,10 +6,12 @@
     "region": "us-east-1",
     "event_bus_name": "regintel_custom_event_bus",
     "detail": {
-        "s3_enrich_in":"",
+        "data":{
+            "s3_enrich_in":"",
+            "s3_raw":""
+        },
         "metadata": [
             {
-                "s3_raw": "",
                 "last_updated": "2020-08-28",
                 "source_url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2017/004782s176lbl.pdf",
                 "file_name": "004782s176lbl.pdf",

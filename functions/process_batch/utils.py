@@ -93,7 +93,8 @@ def split_s3_url(s3_object_url):
     ## Load logger
     logger = load_log_config()
 
-    s3_object_url = s3_object_url.replace("s3://", "") if "s3://" in s3_object_url else s3_object_url
+    s3_object_url = s3_object_url.replace(
+        "s3://", "") if "s3://" in s3_object_url else s3_object_url
 
     s3_parts = s3_object_url.split("/")
     bucket_name = s3_parts[0]
@@ -119,7 +120,6 @@ def read_obj_from_bucket(object_path):
     logger = load_log_config()
 
     logger.info(f"Reading from: {object_path}")
-
 
     client = boto3.resource("s3")
 
@@ -153,3 +153,30 @@ def get_chunks(reader, chunk_size=1):
             del chunk[:]
         chunk.append(line)
     yield chunk
+
+
+## Get s3 objects
+def get_s3_objects(bucket, prefix='', suffix='.csv'):
+    """[summary]
+
+    Args:
+        bucket ([type]): [description]
+        prefix (str, optional): [description]. Defaults to ''.
+    """
+    kwargs = {'Bucket': bucket, 'Prefix': prefix}
+    s3 = boto3.client('s3')
+
+    while True:
+        response = s3.list_objects_v2(**kwargs)
+        for obj in response['Contents']:
+            key = obj['Key']
+            if key.endswith(suffix):
+                yield key
+        try:
+            kwargs['ContinuationToken'] = response['NextContinuationToken']
+        except KeyError:
+            break
+
+
+def make_s3_uri(bucket_name, key):
+    return 's3://' + bucket_name + "/" + key
