@@ -16,6 +16,7 @@ an approval. Then it will deploy to your production landing zone environment, ag
 
 Details about the requirements and features of the deployment pipeline can be found in the [GIS_HCS_AWS_CICD GitHub repository](https://github.com/EliLillyCo/GIS_HCS_AWS_CICD/blob/master/docs/release-pipelines/README.md).
 
+<video controls="" autoplay="" name="media"><source src="https://github-production-user-asset-6210df.s3.amazonaws.com/1686251/252157763-839bd04c-8853-44c4-b275-5e61413a3904.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20240312%2Fus-east-1%2Fs3%2Faws4_request&amp;X-Amz-Date=20240312T131055Z&amp;X-Amz-Expires=300&amp;X-Amz-Signature=d252cabc369e6099729ddb24d74d466e359d4a6550f0d7bd3f9c179806db2df7&amp;X-Amz-SignedHeaders=host&amp;actor_id=1686251&amp;key_id=0&amp;repo_id=456981268" type="video/mp4"></video>
 
 ## Directory Structure
 
